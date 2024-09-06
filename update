@@ -1,0 +1,27 @@
+#!/bin/bash
+
+if [[ "$(sudo whoami)" != "root" ]]; then
+	echo "ERROR: Must run as root user or with sudo privileges"
+	exit
+fi
+
+declare -i num
+num=$(sudo apt update 2>/dev/null |\
+	  grep -P "packages can be upgraded" |\
+	  tail -n 1 |\
+	  grep -oE '^\s*[0-9]+')
+
+if (( num > 0 )); then
+	ranUpdate=false
+
+	echo -e "$num packages are upgradable\n"
+
+	sudo apt upgrade && ranUpdate=true
+
+	if [ $ranUpdate ]; then
+		sudo apt autoremove
+	fi
+
+else
+	echo "No packages to update"
+fi
