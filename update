@@ -6,6 +6,9 @@ if [[ "$(sudo whoami)" != "root" ]]; then
 fi
 
 declare -i num
+declare version
+newUIVersion="2.9.0"
+
 echo "Checking for upgradable packages..."
 num=$(sudo apt update 2>/dev/null |\
 	  grep -P "packages can be upgraded" |\
@@ -17,10 +20,20 @@ if (( num > 0 )); then
 
 	echo -e "$num packages are upgradable\n"
 
+	version="$(apt -v | awk '{print $2}')"
+
+	#if $version is more recent, the threshold version will be the output of the echo
+	if [[ "$(echo -e "$version\n$newUIVersion" | sort -V | tail -n 1)" == "$newUIVersion" ]]; then
+		apt list --upgradable 2>/dev/null | tail -n $num
+	fi
+
 	sudo apt upgrade && ranUpdate=true
 
 	if [ $ranUpdate ]; then
 		sudo apt autoremove
+		echo "Update complete"
+	else
+		echo "Update interupted"
 	fi
 
 else
