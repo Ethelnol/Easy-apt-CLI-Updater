@@ -24,7 +24,9 @@ if (( num > 0 )); then
 
 	#if $version is more recent, the threshold version will be the output of the echo
 	if [[ "$(echo -e "$version\n$newUIVersion" | sort -V | tail -n 1)" == "$newUIVersion" ]]; then
-		apt list --upgradable 2>/dev/null | tail -n $num
+		# shellcheck disable=SC2046
+		echo -e "Updating:\n\t"\
+		$(apt list --upgradable 2>/dev/null | tail -n $num | cut -f1 -d "/")
 	fi
 
 	sudo apt upgrade && ranUpdate=true
