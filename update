@@ -35,7 +35,7 @@ main(){
 	echo "Getting list of updated packages..."
 	
 	if [[ -z "$(sudo apt-get -qq update 2> /dev/null)" ]]
-		then echo -n "" #return $false
+		then return $false
 	fi
 
 	echo "Sorting packing information..."
