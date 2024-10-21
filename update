@@ -5,9 +5,10 @@ declare -i false=1
 
 declare newUIVersion="2.9.0"
 declare -i ranUpdate=$false
-declare optspec=":y-:"
-declare opts=""
+declare optsStr=""
+declare -i quiet=$false
 declare mainOutput
+declare -i currentStep=0
 
 declare upgradeOutput
 declare installOutput
@@ -21,26 +22,86 @@ declare -a upgradeArr=()
 declare -a installArr=()
 declare -a removeArr=()
 declare -a withheldArr=()
+declare versionCheck
 
-#returns true if (update run successfully) or (nothing to update)
-#returns false if (update is interupted)
+#returns $true if (update run successfully) or (nothing to update)
+#returns $false if (update is interrupted)
 main(){
-	local numStr=""
-	local -i returnBool=$false
-	local tempStr
+	local returnBool=$false
+	local tempStr=""
 
-	GetOpts "$@"
-	if [[ "$?" == "$true" ]]; then opts="-y"; fi
+	echo -n "Getting list of updated packages..."
+	sudo apt-get update &> /dev/null < /dev/null
+	if ((! quiet)); then echo ""; else echo " Done"; fi
+	(( currentStep+=1 )) #==1
 
-	echo "Getting list of updated packages..."
-	
-	if [[ -z "$(sudo apt-get -qq update 2> /dev/null)" ]]
-		then return $false
+	echo -n "Sorting packing information..."
+	mainOutput="$(sudo apt-get upgrade --assume-no 2> /dev/null)"
+
+	tempStr="$(ParseMultilineString \
+		"Calculating upgrade..." \
+		"" \
+		"$mainOutput" \
+	)"
+
+	if [[ -z "$tempStr" ]]; then
+		tempStr="$(ParseMultilineString \
+			"Calculating upgrade... Done" \
+			"" \
+			"$mainOutput" \
+		)"
 	fi
 
-	echo "Sorting packing information..."
-	mainOutput="$(sudo apt upgrade -qq --assume-no 2> /dev/null)"
+	mainOutput="$tempStr"; unset tempStr
 
+	SortPackageInfo
+	
+	if ((! quiet)); then echo ""; else echo " Done"; fi
+	(( currentStep+=1 )) #==2
+
+	versionCheck="$(\
+		echo -e "$newUIVersion\n$(\
+			apt -v |\
+			awk '{print $2}'\
+		)" |\
+		sort -V |\
+		tail -1 \
+	)"
+
+	if (( upgradeNum + installNum )); then Update && returnBool=$true; fi
+	
+	if (( removeNum )); then Remove && returnBool=$true; fi
+
+	return $returnBool
+}
+
+#returns $true if ("-y" or "--yes" or "--assume-yes" are passed as options)
+#returns $false if ("-h" or "--help" is passed as an option) 
+GetOpts(){
+	local -a optsArr=()
+	local i
+	
+	read -ra optsArr <<< "$*"
+
+	for i in "${optsArr[@]}"; do
+		if [[ "$i" == "-h" ]] || [[ "$i" == "--help" ]]; then
+			DisplayHelp
+			exit $false
+		fi
+
+		if [[ "$i" =~ ^-[q]{1,}$ ]] || [[ "$i" == "--quiet" ]]; then
+			quiet=$true
+		fi
+
+		if [[ -n "$optsStr" ]]; then optsStr+=" "; fi
+
+		optsStr+="$i"
+	done
+
+	return $true
+}
+
+SortPackageInfo(){
 	upgradeOutput="$(ParseMultilineString \
 		"The following packages will be upgraded:" \
 		"" \
@@ -60,6 +121,13 @@ main(){
 		"" \
 		"$mainOutput" \
 	)"
+	if [[ -z "$removeOutput" ]]; then
+		removeOutput="$(ParseMultilineString \
+			"The following package was automatically installed and is no longer required:" \
+			"" \
+			"$mainOutput" \
+		)"
+	fi
 	removeOutput="$(UntilSpecificChar $false "$removeOutput")"
 
 	withheldOutput="$(ParseMultilineString \
@@ -73,75 +141,18 @@ main(){
 	IFS=$'\n\t ' read -rd '' -a installArr  <<<"$installOutput"
 	IFS=$'\n\t ' read -rd '' -a removeArr   <<<"$removeOutput"
 	IFS=$'\n\t ' read -rd '' -a withheldArr <<<"$withheldOutput"
-
-	tempStr="$(echo "$mainOutput" | tail -1)"
-
-	if [[ "$tempStr" != "Abort." ]]; then
-		if [[ "${tempStr:0:1}" == [[:digit:]] ]]; then
-			upgradeNum=$(FilterRemovableLine 0 "$numStr")
-			installNum=$(FilterRemovableLine 2 "$numStr")
-			removeNum=$(FilterRemovableLine 5 "$numStr")
-			withheldNum=$(FilterRemovableLine 9 "$numStr")
-		else return $false
-		fi
-	else
-		numStr="$(echo "$mainOutput" | tail -5 | head -1)"
-
-		upgradeNum=$(FilterRemovableLine 0 "$numStr")
-		installNum=$(FilterRemovableLine 2 "$numStr")
-		removeNum=$(FilterRemovableLine 5 "$numStr")
-		withheldNum=$(FilterRemovableLine 9 "$numStr")
-	fi
-
-	if (( upgradeNum + installNum ))
-		then Update
-		else Remove
-	fi
-
-	return $?
-}
-
-#returns $true if (-y, --yes, or --assume-yes) are passed as options
-#returns $false if (no options passed) or (-y, --yes, or --assume-yes not passed) 
-GetOpts(){
 	
-	while getopts "$optspec" optchar; do
-		case ${optchar} in
-			y)
-				return $true
-				;;
-			-)
-				case "${OPTARG}" in
-					yes|assume-yes)
-						return $true
-						;;
-					*)
-						continue
-						;;
-				esac
-				;;
-			*)
-				continue
-				;;
-		esac
-	done
-
-	return $false
+	upgradeNum=${#upgradeArr[@]}
+	installNum=${#installArr[@]}
+	removeNum=${#removeArr[@]}
+	withheldNum=${#withheldArr[@]}
 }
 
 #returns $true if (update run successfully)
-#returns $false if (update interupted)
+#returns $false if (update interrupted)
 Update(){
+	local ranUpdate=$false
 	echo -e "$upgradeNum packages are upgradable, $installNum will be newly installed\n"
-
-	versionCheck="$(\
-		echo -e "$newUIVersion\n$(\
-			apt -v |\
-			awk '{print $2}'\
-		)" |\
-		sort -V |\
-		tail -1 \
-	)"
 
 	#if $version is more recent, the threshold version will be the output of the echo
 	if [[ "$versionCheck" == "$newUIVersion" ]]; then
@@ -174,97 +185,87 @@ Update(){
 		unset i
 	fi
 
-	eval "sudo apt upgrade $opts" && ranUpdate=$true
+	eval "sudo apt upgrade $optsStr" && ranUpdate=$true
 	echo ""
-
-	#if (ranUpdate == true)
-	if (( ! ranUpdate ))
-		then Remove; return $true
-		else return $false
-	fi
+	
+	return $ranUpdate
 }
 
-#returns true if (apt autoremove was prompted successfully)
-#returns false if ($numRemovable == 0)
+#returns $true if (apt autoremove was prompted successfully)
+#returns $false if ($numRemovable == 0)
 Remove(){
-	local returnBool=$false
+	local ranRemove=$false
 	if ((! removeNum)); then return $false; fi
 
 	echo "$removeNum packages can be removed"
 
 	if ((removeNum)); then
-		local i
-		echo "Removing:"
-		for i in "${removeArr[@]}"; do
-			echo -e "\t$i"
-		done
-		echo ""
+		if [[ "$versionCheck" == "$newUIVersion" ]]; then
+			echo "Removing:"
+			for i in "${removeArr[@]}"; do
+				echo -e "\t$i"
+			done
+			echo -ne "\n"
+		fi
 
-		eval "sudo apt autoremove -qq $opts"
-		returnBool=$?
+	eval "sudo apt autoremove -qq $optsStr" && ranRemove=$true
 	fi
 
 	echo ""
-	return $returnBool	
+	return $ranRemove
 }
 
-FilterRemovableLine(){
-	local -a arr
-	IFS=' ' read -rd '' -a arr <<<"$*"
-
-	echo "${arr[$(( $1 + 1))]}"
-}
-
-#returns lines between $top and $bot noninclusively
-#if $top/$bot strings == "" then the respective filter is skipped
+#prints lines between $1 and $2 non inclusively
+#if $1||$2 == "", then the respective filter is skipped
+#if $1||$2 not in $3, then "" is printed
 ParseMultilineString(){
-	local top="$1"; shift
-	local bot="$1"; shift
-	local str="$1"; shift
+	if [[ -z "$3" ]]; then echo ""; return; fi
 
-	if [[ -z "$str" ]]; then echo ""; return; fi
+	local arrLimits=("$1" "$2")
+	local arrChecks=("head" "tail")
+	local str="$3"
 
-	local holdStr="$str"
-	local -i i=$(( "$(echo "$str" | wc -l)" ))
+	local limit=""
+	local check=""
+	local sort=""
 
-	if [[ -n "$top" ]]; then
-		while [[ "$(echo "$holdStr" | head -1)" != "$top" ]]; do
+	local -i i
+	local -i j
+	
+	i=$(( "$(echo "$str" | wc -l)" ))
+
+	for ((j=0;j<2;j++)); do
+		limit="${arrLimits[j]}"
+		
+		if [[ -z "$limit" ]]; then continue; fi
+
+		check="${arrChecks[j]}"
+		sort="${arrChecks[j-1]}"
+
+		while [[ "$(echo "$str" | eval "$check -1")" != "$limit" ]]; do
 			i=$((i-1))
-			holdStr="$(echo "$holdStr" | tail -n $i )"
-			if [[ -z "$holdStr" ]]; then echo ""; return; fi
+			str="$(echo "$str" | eval "$sort -n $i" )"
+			if [[ -z "$str" ]]; then echo ""; return; fi
 		done
 
 		i=$((i-1))
-		holdStr="$(echo "$holdStr" | tail -n $i)"
-
-		str="$holdStr"
-	fi
-
-	if [[ -n "$bot" ]]; then
-		while [[ "$(echo "$holdStr" | tail -1)" != "$bot" ]]; do
-			i=$((i-1))
-			holdStr="$(echo "$holdStr" | head -n $i)"
-			if [[ -z "$holdStr" ]]; then echo ""; return; fi
-		done
-
-		i=$((i-1))
-		str="$(echo "$holdStr" | head -n $i)"
-	fi
+		str="$(echo "$str" | eval "$sort -n $i")"
+	done
 
 	echo "$str"
 	return
 }
 
 UntilSpecificChar(){
-	local -i charIsNum=$1; shift
-	local sourceStr="$*"
+	local -i checkDigit=$1; shift
 	local -a sourceArr
 	local returnStr=""
 	local i
 
-	IFS=$'\n' read -rd '' -a sourceArr <<<"$sourceStr"
+	IFS=$'\n' read -rd '' -a sourceArr <<<"$*"
 
-	if (( ! charIsNum )); then
+	#if ($1 == $true)
+	if (( ! checkDigit )); then
 		for i in "${sourceArr[@]}"; do
 			if [[ -z "$i" ]]; then break; fi
 
@@ -291,6 +292,10 @@ UntilSpecificChar(){
 	return
 }
 
+DisplayHelp(){
+	echo "help [ph]"
+}
+
 #returns true if (user is root) or (user executes sudo)
 #returns false if (user cannot execute sudo) or (user does not execute sudo)
 SudoCheck(){	
@@ -302,5 +307,37 @@ SudoCheck(){
 	return $true
 }
 
-SudoCheck && main "$@" && echo -e "Update complete" || echo -e "Nothing to Update"
-exit $?
+# shellcheck disable=SC2317
+SIGINT_Interupt(){
+	echo -ne "\nStopping update:"
+	case $currentStep in
+		0)
+			echo -n "Package list retrieval"
+			;;
+
+		1)
+			echo -n "Package sorting"
+			;;
+
+		2)
+			echo -n "Updating/Removal process"
+			;;
+	esac
+	echo " interrupted"
+}
+
+#has command handle SIGINT itself
+trap 'SIGINT_Interupt; exit $false' SIGINT
+
+tput civis
+
+SudoCheck && GetOpts "$@" && main
+
+if [[ "$?" == "$true" ]]
+	then echo "Update complete"
+	else echo "Update complete: Nothing to do"
+fi
+
+tput cnorm
+
+exit $true
