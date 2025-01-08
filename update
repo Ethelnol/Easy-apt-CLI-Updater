@@ -55,7 +55,7 @@ main(){
 
 	echo -ne "\nUpdate complete"
 
-	if $ran; then echo -n ": Nothing to do"; fi
+	if ! $ran; then echo -n ": Nothing to do"; fi
 
 	echo ""
 	
