@@ -21,24 +21,24 @@ declare -a withheldArr=()
 
 main(){
 	local ran=false
+
 	echo -n "Getting list of updated packages..."
 	sudo apt-get update &> /dev/null < /dev/null
 	if $quiet; then echo ""; else echo " Done"; fi
 
-	currentStep=$(( currentStep + 1 )) #==1
+	(( currentStep+=1 )) #==1
 
 	echo -n "Sorting packing information..."
-	if ! SortPackageInfo "$(sudo apt-get full-upgrade --assume-no)"; then
-		if $quiet
-			then echo ""
-			else echo " Done"
-		fi
+	SortPackageInfo "$(sudo apt-get upgrade --assume-no)"
+
+	if (( $? == 1 )); then
+		if $quiet; then echo ""; else echo " Done"; fi
 		return 1
-	elif $quiet; then echo ""
-	else echo " Done"
 	fi
 
-	currentStep=$(( currentStep + 1 )) #==2
+	if $quiet; then echo ""; else echo " Done"; fi
+
+	(( currentStep+=1 )) #==2
 
 	versionCheck="$(\
 		echo -e "$newUIVersion\n$(\
@@ -55,7 +55,7 @@ main(){
 
 	echo -ne "\nUpdate complete"
 
-	if ! $ran; then echo -n ": Nothing to do"; fi
+	if $ran; then echo -n ": Nothing to do"; fi
 
 	echo ""
 	
@@ -65,52 +65,32 @@ main(){
 	fi
 }
 
-#returns 1 if ("-h" or "--help" is passed as an option) 
+#returns $false if ("-h" or "--help" is passed as an option) 
 GetOpts(){
-	local -a tempArr=()
 	local -a optsArr=()
-	
 	local i
-	local -i j=0
 	
-	read -ra tempArr <<< "$*"
-
-	for i in "${tempArr[@]}"; do
-		if [[ "$i" =~ ^[-]{2,} ]]; then
-			while [[ "$i" =~ ^[-]{3} ]]; do
-				i="${i:1}"
-			done
-			optsArr+=("$i")
-
-		elif [[ "$i" =~ ^[-]{1,} ]] && (( ${#i} > 2 )); then
-			for (( j = 1; j < ${#i}; j++ )); do
-				optsArr+=("-${i:$j:1}")
-			done
-		else
-			optsArr+=("$i")
-		fi
-
-	done
+	read -ra optsArr <<< "$*"
 
 	for i in "${optsArr[@]}"; do
-		case $i in
-			-h|--help)
-				DisplayHelp
-				exit 1
-				;;
-			-q|--quiet)
-				quiet=true
-				;;
-			*)
-				optsStr+="$i "
-				;;
-		esac
+		if [[ "$i" == "-h" ]] || [[ "$i" == "--help" ]]; then
+			DisplayHelp
+			exit 1
+		fi
+
+		if [[ "$i" =~ ^-[q]{1,}$ ]] || [[ "$i" == "--quiet" ]]; then
+			quiet=true
+		fi
+
+		if [[ -n "$optsStr" ]]; then optsStr+=" "; fi
+
+		optsStr+="$i"
 	done
 
 	return 0
 }
 
-#returns 1 if (input is empty)
+#returns $false if (input is empty)
 SortPackageInfo(){
 	if [[ -z "$*" ]]; then return 1; fi
 
@@ -160,14 +140,10 @@ SortPackageInfo(){
 	return 0
 }
 
-#returns 0 if (update run successfully)
-#returns 1 if (update interrupted)
+#returns $true if (update run successfully)
+#returns $false if (update interrupted)
 Update(){
-	echo -n "$upgradeNum package"
-	if (( upgradeNum != 1 )); then echo -n "s"; fi
-	echo -n " to be upgradable, $installNum package" 
-	if (( installNum != 1 )); then echo -n "s"; fi
-	echo -e " to be installed\n"
+	echo -e "$upgradeNum packages are upgradable, $installNum will be newly installed\n"
 
 	#if $version is more recent, the threshold version will be the output of the echo
 	if [[ "$versionCheck" == "$newUIVersion" ]]; then
@@ -194,13 +170,13 @@ Update(){
 		unset i
 	fi
 
-	eval "sudo apt full-upgrade $optsStr"
+	eval "sudo apt upgrade $optsStr"
 	
 	return $?
 }
 
-#returns 0 if (apt autoremove was prompted successfully)
-#returns 1 if ($numRemovable == 0)
+#returns $true if (apt autoremove was prompted successfully)
+#returns $false if ($numRemovable == 0)
 Remove(){
 	echo "$removeNum packages can be removed"
 
@@ -288,18 +264,18 @@ DisplayHelp(){
 	echo "help [ph]"
 }
 
-#returns 0 if (user is root) or (user executes sudo)
-#returns 1 if (user cannot execute sudo) or (user does not execute sudo)
-SudoCheck(){
+#returns true if (user is root) or (user executes sudo)
+#returns false if (user cannot execute sudo) or (user does not execute sudo)
+SudoCheck(){	
 	if [[ "$(whoami)" != "root" ]]; then
-		sudo echo -n "" && return 0
+		(sudo -l &> /dev/null) && sudo echo -n "" && return 0
 
 		echo -e "Error: requires sudo privileges\n"; return 1
 	fi
 	return 0
 }
 
-#shellcheck disable=SC2317
+# shellcheck disable=SC2317
 SIGINT_Interupt(){
 	echo -ne "\nStopping update: "
 	case $currentStep in
