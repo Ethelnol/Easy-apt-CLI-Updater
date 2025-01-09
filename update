@@ -29,7 +29,7 @@ main(){
 	(( currentStep+=1 )) #==1
 
 	echo -n "Sorting packing information..."
-	SortPackageInfo "$(sudo apt-get upgrade --assume-no)"
+	SortPackageInfo "$(sudo apt-get full-upgrade --assume-no)"
 
 	if (( $? == 1 )); then
 		if $quiet; then echo ""; else echo " Done"; fi
@@ -170,7 +170,7 @@ Update(){
 		unset i
 	fi
 
-	eval "sudo apt upgrade $optsStr"
+	eval "sudo apt full-upgrade $optsStr"
 	
 	return $?
 }
