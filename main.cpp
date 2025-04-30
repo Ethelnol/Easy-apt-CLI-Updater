@@ -1,9 +1,7 @@
 #include <csignal> //for sig_int capture
 #include <cstdio>  //for sig_int capture
-#include <cstdlib>
 #include <iostream>
 #include <string>
-#include <unistd.h>
 #include <sys/ioctl.h> //for rows and cols
 
 #include "functions.h"
@@ -34,8 +32,6 @@ int main(int argc, char* argv[]){
 
 		cols = size.ws_col;
 	}
-
-	cols = 100;
 
 	if (!getOpts(argc, argv, args, quiet, assumeYes, simulate)) exit(1);
 
@@ -171,7 +167,7 @@ int main(int argc, char* argv[]){
 
 	cout << endl;
 	cout << "Update Complete" << flush;
-	if (!add + !remove) cout << ": Nothing to do" << flush;
+	if (!add && !remove) cout << ": Nothing to do" << flush;
 	else if (!changes) cout << ": No action taken" << flush;
 	cout << endl;
 
@@ -191,9 +187,9 @@ void sig_handler(int signal){
 			case 2: cerr << "Updating/Removal process" << flush;
 				break;
 			default:break;
-
-				cerr << " interrupted" << endl;
-				exit(1);
 		}
+
+		cerr << " interrupted" << endl;
+		exit(1);
 	}
 }

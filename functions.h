@@ -28,9 +28,10 @@ void getPackages(vector<vector<string>>& packages);
   * Checks for arguments passed when program is executed and assigns to vector
   * @param argc number of parameters
   * @param argv parameters
-  * @param args vector to be populated with parameters
+  * @param args string to be populated with parameters
   * @param quiet bool for if update() should have quieter output
-  * @param assumeYes bool for if update() should prompt for user Y/n, doesn't prompt if assumeYes is true
+  * @param assumeYes bool for if update() should prompt for user y/N, doesn't prompt if assumeYes is true
+  * @param simulate bool for if --simulate, --assume-no, or alternatives are passed.  used to skip y/N prompts if true
   * @post args is populated, and quiet and assumeYes are set to true if an argument modifying them was passed
   * @return false if -h or --help is passed as an argument
   **/
@@ -41,26 +42,10 @@ bool getOpts(int argc, char* argv[], string& args, bool& quiet, bool& assumeYes,
   * @param vect vector to be output
   * @param cols width of terminal window
   * @post output is sent to stdout
+  * @todo Fix spacing of multiple packages on one line
+  * @todo Add method of spacing columns relative to the largest package in column width
   **/
 void outputVector(const vector<string>& vect, size_t cols);
-
-/**
-  * Converts c to lowercase letter if c is a letter, otherwise returns c
-  * @param c char to be checked
-  * @return lowercase c or c
-  **/
-//char toLower(char c);
-
-/**
-  * Checks if str1 is alphabetically smaller than str2
-  * @param str1 string to be checked
-  * @param str2 string to be checked against
-  * @return true if str1 is alphabetically smaller than str2
-  * @return false if str1 is alphabetically identical or larger than str2
-  **/
-//bool isSmallerAlphabetically(const string& str1, const string& str2);
-
-//bool upgradePackage(vector<string> upgrade, bool quiet);
 
 /**
   * Gets output of stdout and stderr and returns output as string

@@ -4,62 +4,36 @@
 
 #include "functions.h"
 
-#include <cstdio>
-#include <cstdlib>
 #include <iostream>
-#include <sstream>
-#include <sys/ioctl.h> //for rows and cols
-#include <unistd.h> //for rows and cols
 
 void getPackages(vector<vector<string>>& packages){
 	std::stringstream ss(GetStdoutFromCommand("sudo apt-get dist-upgrade --assume-no"));
 	string line;
 	string package;
+	string overflow;
 
-	while (!ss.eof()){
-		getline(ss, line);
+	size_t type;
+
+	while (!ss.eof() && getline(ss, line)){
+		type = SIZE_MAX;
+		if (!overflow.empty()){
+			overflow += line;
+			line = overflow;
+			overflow = "";
+		}
 		if (line.empty() || line.at(0) != 'T') continue;
 
-		if (line == "The following packages will be upgraded:"){
-			ss >> package;
-			while (!package.empty() && isalpha(package.at(0))){
-				packages.at(UPGRADE).push_back(package);
-				ss >> package;
-			}
-			//packages.at(UPGRADE) = sortVectorAlphabetically(packages.at(UPGRADE));
-		}
-		else if (line == "The following NEW packages will be installed:"){
-			ss >> package;
-			while (!package.empty()){
-				packages.at(INSTALL).push_back(package);
-				ss >> package;
-			}
-			//packages.at(INSTALL) = sortVectorAlphabetically(packages.at(INSTALL));
-		}
+		if (line == "The following packages will be upgraded:") type = UPGRADE;
+		else if (line == "The following NEW packages will be installed:") type = INSTALL;
 		else if (line == "The following packages were automatically installed and are no longer required:" ||
-		         line == "The following package was automatically installed and is no longer required:"){
-			ss >> package;
-			while (!package.empty() && std::islower(package.at(0))){
-				packages.at(REMOVE).push_back(package);
-				ss >> package;
-			}
-			//remove = sortVectorAlphabetically(remove);
-		}
-		else if (line == "The following packages will be REMOVED:"){
-			ss >> package;
-			while (!package.empty()){
-				packages.at(NOW_REMOVE).push_back(package);
-				ss >> package;
-			}
-			//packages.at(NOW_REMOVE) = sortVectorAlphabetically(packages.at(NOW_REMOVE));
-		}
-		else if (line == "The following packages have been kept back:"){
-			ss >> package;
-			while (!package.empty()){
-				packages.at(WITHHELD).push_back(package);
-				ss >> package;
-			}
-			//packages.at(WITHHELD) = sortVectorAlphabetically(packages.at(WITHHELD));
+		         line == "The following package was automatically installed and is no longer required:") type = REMOVE;
+		else if (line == "The following packages will be REMOVED:") type = NOW_REMOVE;
+		else if (line == "The following packages have been kept back:") type = WITHHELD;
+
+		if (type != SIZE_MAX){
+			while (ss >> package && !package.empty() && std::islower(package.at(0)))
+				packages.at(type).push_back(package);
+			overflow = package;
 		}
 	}
 }
@@ -103,117 +77,70 @@ bool getOpts(const int argc, char* argv[], string& args, bool& quiet, bool& assu
 }
 
 void outputVector(const vector<string>& vect, const size_t cols){
-	size_t maxPerLine = 1;
-	string line;
+	size_t maxPerLine = 0;  //max number of packages per line
+	size_t lineLength = 0;  //length of line
 
-	for (size_t i = 0; i < line.size() && line.size() < cols; i++){
-		line += "  " + vect.at(i);
+	for (const string& i : vect){
+		lineLength += i.length() + 1;
+		if (lineLength >= cols) break;
+
 		maxPerLine++;
 	}
 
-	maxPerLine--;
-
-	vector<string> outputVect;
-
-	if (maxPerLine < 2 || cols == 0){
+	if (maxPerLine < 2){
 		for (const string& j : vect)
 			std::cout << "  " << j << std::endl;
 		return;
 	}
 
-	line = "";
-	size_t numOnLine = 0;
-	size_t i = 0;
+	size_t i;               //index of current package
+	size_t largestLength = 0;     //size of package with longest name
+	size_t numOnLine;
 
-	while (i != vect.size() && maxPerLine > 2){
+	for (const string& package : vect){
+		if (package.length() > largestLength)
+			largestLength = package.length();
+	}
+
+	while (i != vect.size()){
+		numOnLine = 0;   //number of packages on current line
+		lineLength = 0;
 		for (i = 0; i < vect.size(); i++){
-			if (numOnLine == maxPerLine){
-				outputVect.push_back(line);
-				numOnLine = 0;
-				line = "";
-			}
+			lineLength += 2 + largestLength;
+			numOnLine++;
 
-			line += "  " + vect.at(i);
-
-			if (line.size() >= cols){
-				outputVect.resize(0);
-				numOnLine = 0;
+			if (lineLength >= cols){
 				maxPerLine--;
 				break;
 			}
 
-			numOnLine++;
+			if (numOnLine == maxPerLine){
+				numOnLine = 0;
+				lineLength = 0;
+			}
 		}
 
-		if (maxPerLine == 1)
+		if (maxPerLine < 2){
 			for (const string& j : vect)
-				outputVect.push_back("  " + j);
+				std::cout << "  " << j << std::endl;
+			return;
+		}
 	}
 
-	for (const string& j : outputVect)
-		std::cout << j << std::endl;
-}
+	size_t j;
+	size_t vectSize = vect.size();
+	size_t sortSize = (vectSize / maxPerLine);
+	if (vectSize % maxPerLine) sortSize++;
+	for (i = 0; i < sortSize; i++){
+		for (numOnLine = 0; numOnLine < maxPerLine; numOnLine++){
+			if (i + (numOnLine * sortSize) >= vectSize) break;
 
-char toLower(char c){
-	if (!isalpha(c)) return c;
-	return static_cast<char>(tolower(c));
-}
-
-/**
-  * Checks if str1 is alphabetically smaller than str2
-  * @param str1 to check
-  * @param str2 to check str1 against
-  * @return true if str1 is alphabetically smaller than str2
-  * @return false if str1 is the same as str2 or is alphabetically larger than str2
-  **/
-/*
-bool isSmallerAlphabetically(const string& str1, const string& str2){
-	for (size_t i = 0; i < std::min(str1.size(), str2.size()); i++){
-		if (toLower(str1.at(i)) < toLower(str2.at(i)))
-			return true;
-		if (toLower(str1.at(i)) > toLower(str2.at(i)))
-			return false;
-	}
-	//if the sizes are the same, they must be the same string (with potentially different capitalisation)
-	if (str1.size() == str2.size()) return false;
-	//if str1 is bigger than str2, then str1 is alphabetically larger
-	return (std::min(str1.size(),str2.size()) == str1.size());
-}
- */
-
-/*
-vector<string> sortVectorAlphabetically(vector<string>& vect){
-	if (vect.empty()) return vect;
-
-	vector<string> sorted = vect;
-	size_t i = 0;
-
-	while (i != sorted.size() - 1)
-		for (i = 0; i < sorted.size() - 1; i++)
-			if (isSmallerAlphabetically(sorted.at(i + 1), sorted.at(i)) &&
-			    sorted.at(i + 1) != sorted.at(i)){
-				string tmpStr = sorted.at(i + 1);
-				sorted.at(i + 1) = sorted.at(i);
-				sorted.at(i) = tmpStr;
-				break;
-			}
-
-	return sorted;
-}
-*/
-
-/*
-bool upgradePackage(vector<string> upgrade, const bool quiet){
-	vector<string> hasDependencies;
-	vector<string> upgraded;
-	upgraded.resize(upgrade.size());
-
-	while (!upgrade.empty()){
-
-
+			std::cout << "  " << vect.at(i + (numOnLine * sortSize));
+			for (j = 0; j < (largestLength - vect.at(i + (numOnLine * sortSize)).length()); j++) std::cout << " ";
+		}
+		std::cout << std::endl;
 	}
 }
- */
 
 string GetStdoutFromCommand(string cmd){
 	string data;
