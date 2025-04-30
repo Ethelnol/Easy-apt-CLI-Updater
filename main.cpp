@@ -11,7 +11,7 @@ size_t currentStep = 0;
 void sig_handler(int signal);
 
 int main(int argc, char* argv[]){
-	using std::cout, std::flush, std::endl;
+	using std::cout, std::endl;
 
 	if (signal(SIGINT, sig_handler) == SIG_ERR){
 		std::cerr << "Error catching SIGINT" << endl;
@@ -35,16 +35,16 @@ int main(int argc, char* argv[]){
 
 	if (!getOpts(argc, argv, args, quiet, assumeYes, simulate)) exit(1);
 
-	cout << "Getting list of updated packages..." << flush;
-	system("sudo apt-get update >/dev/null 2>&1");
+	cout << "Getting list of updated packages..." << std::flush;
+	if (system("sudo apt-get update >/dev/null 2>&1")) sig_handler(SIGINT);
 	currentStep++;
-	if (!quiet) cout << " Done" << flush;
+	if (!quiet) cout << " Done";
 	cout << endl;
 
-	cout << "Sorting package information..." << flush;
+	cout << "Sorting package information..." << std::flush;
 	getPackages(packages);
 	currentStep++;
-	if (!quiet) cout << " Done" << flush;
+	if (!quiet) cout << " Done";
 	cout << endl;
 
 	bool changes = false;
@@ -65,34 +65,34 @@ int main(int argc, char* argv[]){
 		if (!packages.at(UPGRADE).empty()){
 			size_t size = packages.at(UPGRADE).size();
 
-			cout << size << " package" << flush;
+			cout << size << " package";
 			if (size > 1)
-				cout << "s are" << flush;
+				cout << "s are";
 			else
-				cout << " is" << flush;
-			cout << " upgradable" << flush;
+				cout << " is";
+			cout << " upgradable";
 
 			needComma = true;
 		}
 		if (!packages.at(INSTALL).empty()){
 			size_t size = packages.at(INSTALL).size();
 
-			if (needComma) cout << ", " << flush;
-			cout << size << " package" << flush;
+			if (needComma) cout << ", ";
+			cout << size << " package";
 			if (size > 1)
-				cout << "s" << flush;
-			cout << " will be newly installed" << flush;
+				cout << "s";
+			cout << " will be newly installed";
 
 			needComma = true;
 		}
 		if (!packages.at(NOW_REMOVE).empty()){
 			size_t size = packages.at(NOW_REMOVE).size();
 
-			if (needComma) cout << ", " << flush;
-			cout << size << " package" << flush;
+			if (needComma) cout << ", ";
+			cout << size << " package";
 			if (size > 1)
-				cout << "s" << flush;
-			cout << " will be removed NOW" << flush;
+				cout << "s" ;
+			cout << " will be removed NOW" ;
 
 			needComma = true;
 		}
@@ -120,7 +120,7 @@ int main(int argc, char* argv[]){
 			if (assumeYes) input = 'y';
 			else{
 				cout << endl;
-				cout << "Would you like to update? (y/N) " << flush;
+				cout << "Would you like to update? (y/N) " << std::flush;
 				std::cin >> input;
 			}
 
@@ -139,7 +139,7 @@ int main(int argc, char* argv[]){
 		{
 			size_t size = packages.at(REMOVE).size();
 
-			cout << packages.at(REMOVE).size() << " package" << flush;
+			cout << packages.at(REMOVE).size() << " package";
 			if (size > 1) cout << "s";
 			cout << " will be removed" << endl;
 		}
@@ -152,7 +152,7 @@ int main(int argc, char* argv[]){
 			if (assumeYes) input = 'y';
 			else{
 				cout << endl;
-				cout << "Would you like to remove these packages? (y/N) " << flush;
+				cout << "Would you like to remove these packages? (y/N) " << std::flush;
 				std::cin >> input;
 			}
 
@@ -166,25 +166,25 @@ int main(int argc, char* argv[]){
 	}
 
 	cout << endl;
-	cout << "Update Complete" << flush;
-	if (!add && !remove) cout << ": Nothing to do" << flush;
-	else if (!changes) cout << ": No action taken" << flush;
+	cout << "Update Complete";
+	if (!add && !remove) cout << ": Nothing to do";
+	else if (!changes) cout << ": No action taken";
 	cout << endl;
 
 	return 0;
 }
 
 void sig_handler(int signal){
-	using std::cerr, std::endl, std::flush;
+	using std::cerr, std::endl;
 
 	if (signal == SIGINT){
-		cerr << endl << "Stopping update: " << flush;
+		cerr << endl << "Stopping update: ";
 		switch (currentStep){
-			case 0: cerr << "Package list retrieval" << flush;
+			case 0: cerr << "Package list retrieval";
 				break;
-			case 1: cerr << "Package sorting" << flush;
+			case 1: cerr << "Package sorting";
 				break;
-			case 2: cerr << "Updating/Removal process" << flush;
+			case 2: cerr << "Updating/Removal process";
 				break;
 			default:break;
 		}

@@ -41,19 +41,9 @@ bool getOpts(int argc, char* argv[], string& args, bool& quiet, bool& assumeYes,
   * Outputs contents of vector cleanly
   * @param vect vector to be output
   * @param cols width of terminal window
+  * @pre vect is not empty
   * @post output is sent to stdout
-  * @todo Fix spacing of multiple packages on one line
-  * @todo Add method of spacing columns relative to the largest package in column width
   **/
 void outputVector(const vector<string>& vect, size_t cols);
-
-/**
-  * Gets output of stdout and stderr and returns output as string
-  * @param cmd command to be passed to system
-  * @return string of stdout and stderr from cmd
-  * @author Jeremy Morgan
-  * @source www.jeremymorgan.com/tutorials/c-programming/how-to-capture-the-output-of-a-linux-command-in-c
-  **/
-string GetStdoutFromCommand(string cmd);
 
 #endif //EASY_CLI_UPDATER_CPP_FUNCTIONS_H
