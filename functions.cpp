@@ -1,7 +1,9 @@
-/** 
+/**
   * Created by Caitlyn Briggs on 04/10/2025
   **/
 
+#include <cassert>
+#include <cstdint>  //SIZE_MAX
 #include <iostream>
 #include <sstream>
 
@@ -44,38 +46,89 @@ void getPackages(vector<vector<string>>& packages){
 		overflow = "";
 		if (line.empty() || line.at(0) != 'T') continue;
 
-		switch(static_cast<uint8_t>(line.at(33))){
-			case 103:
+		/*
+		 * {33,g,e,a,i,M,k}
+		 * {36,d,n,c,l,E,t}
+		 * {38,d,t,l,y,:,b}
+		 */
+		switch(line.at(33)){
+			case 'g':
 				type = UPGRADE;
 				break;
-			case 101:
+			case 'e':
 				type = INSTALL;
 				break;
-			case 97:
-			case 105:
+			case 'a':
+			case 'i':
 				type = REMOVE;
 				break;
-			case 77:
+			case 'M':
 				type = NOW_REMOVE;
 				break;
-			case 107:
+			case 'k':
 				type = WITHHELD;
 				break;
 			default:
-				type = -1;
-				break;
+				std::cerr << "getPackages(), unknown line passed - " << line << std::endl;
+				exit(line.at(33));
 		}
 
-		if (type != -1){
-			while (ss >> package && !package.empty() && std::islower(package.at(0)))
-				packages.at(type).push_back(package);
-			overflow = package;
-			packages.at(type).shrink_to_fit();
-		}
+		while (ss >> package && !package.empty() && std::islower(package.at(0)))
+			packages.at(type).push_back(package);
+		overflow = package;
+		packages.at(type).shrink_to_fit();
 	}
 }
 
-bool getOpts(const int argc, char* argv[], string& args, bool flags[]){
+/**
+  * getOpts helper function, outputs help information if "-h" or "--help" are passed as arguments
+  **/
+void outputHelp(const size_t cols){
+	using std::cout, std::endl;
+
+	const vector<vector<string>> page = {
+			{"EasyUpdater"},
+			{"Usage: EasyUpdater [options]"},
+			{
+				"EasyUpdater is a overhead program for apt and apt-get that makes the process of updating and removing packages faster with a single command.",
+				"EasyUpdater cleanly displays data such as on the packages to be changes and displays the packages similar to apt v2.9.0's UI update.",
+				"Any options passed to EasyUpdater will be passed when running updates, so be sure all arguments are vaild arguments for apt and apt-get.  See apt(8) for more information."
+			}
+	};
+
+	for (size_t paragraph = 0; paragraph < page.size(); paragraph++){
+		for (const string& line : page.at(paragraph)){
+			std::stringstream ss(line);
+			string word;
+			size_t lineLength = 0;
+			bool vomit = false, first = true;
+
+			while (!ss.eof() && ss >> word){
+				if (lineLength + word.size() + 1 > cols){
+					if (first && lineLength == 0){
+						vomit = true;
+						break;
+					}
+
+					cout << endl;
+					lineLength = 0;
+					first = false;
+				}
+
+				cout << word << " " << std::flush;
+				lineLength += word.size() + 1l;
+			}
+
+			if (vomit) cout << line;
+
+			cout << endl;
+		}
+
+		if ((paragraph + 1) < page.size()) cout << endl;
+	}
+}
+
+bool getOpts(const int argc, char* argv[], string& args, bool flags[], const size_t cols){
 	string tmpStr;
 	vector<string> argsVect;
 
@@ -89,7 +142,6 @@ bool getOpts(const int argc, char* argv[], string& args, bool flags[]){
 
 		if (tmpStr.size() == 2 ||
 		    (tmpStr.substr(0, 2) == "--" &&
-		     tmpStr.size() > 2 &&
 		     std::isalnum(tmpStr.at(2)))
 		   ) argsVect.push_back(tmpStr);
 		else{
@@ -101,7 +153,7 @@ bool getOpts(const int argc, char* argv[], string& args, bool flags[]){
 
 	for (const string& i : argsVect){
 		if (i == "-h" || i == "--help"){
-			std::cout << "Help" << std::endl;
+			outputHelp(cols);
 			return false;
 		}
 		else if (i == "-q" || i == "--quiet") flags[quiet] = true;
@@ -117,7 +169,69 @@ bool getOpts(const int argc, char* argv[], string& args, bool flags[]){
 }
 
 /**
-  * outputVector() helper function, returns length of largest package in column
+  * outputVector helper function, outputs packages in vect cleanly
+  * @param vect vector of packages to be output
+  * @param largestPerCol vector of largest package length in each column
+  * @post output sent to stdout
+  * @return true if output
+  */
+bool vectorToStdout(const vector<string>& vect, const vector<size_t>& largestPerCol, const size_t maxRows){
+	using std::cout, std::endl;
+
+	const size_t maxCols = largestPerCol.size();
+
+	if (maxCols < 2){
+		for (const string& pac : vect)
+			cout << "  " << pac << endl;
+		return (maxCols == 1);
+	}
+
+	if (maxRows < 2){
+		for (const string& pac : vect)
+			cout << "  " << pac;
+		cout << endl;
+		return true;
+	}
+
+	for (size_t row = 0; row < maxRows; row++){
+		for (size_t col = 0, pac = row; col < maxCols && pac < vect.size(); col++, pac += maxRows){
+			cout << "  " << vect.at(pac);
+
+			for (size_t k = vect.at(pac).size(); k < largestPerCol.at(col); k++)
+				cout << ' ';
+		}
+		cout << endl;
+	}
+
+	return true;
+}
+
+/**
+  * outputVector helper function, checks if packages of vect can fit into desired number of columns without exceeding terminal width
+  * @param vect vector of packages to check layout validity
+  * @param largestPerCol vector of largest package size in each column
+  * @param cols width of terminal window
+  * @return true if vect packages fit specified layout
+  **/
+bool isValidLayout(const vector<string>& vect, const vector<size_t>& largestPerCol, const size_t maxRows, const size_t cols){
+	const size_t maxCols = largestPerCol.size();
+
+	for (size_t row = 0; row < maxRows; row++){
+		size_t lineLength = 0;	//current num of chars on line
+		size_t pac = row;		//current package index, used to not exceed vect.size()
+
+		for (size_t col = 0; col < maxCols && pac < vect.size(); col++, pac += maxRows){
+			lineLength += 2 + largestPerCol.at(col);
+
+			if (lineLength > cols) return false;
+		}
+	}
+
+	return true;
+}
+
+/**
+  * outputVector helper function, returns length of largest package in column
   * @param column column to check
   * @param maxRows maximum number of packages in each column
   * @return length of largest package in column
@@ -131,89 +245,23 @@ size_t getLargestInColumn(const vector<string>& vect, const size_t col, const si
 	return returnNum;
 }
 
-/**
-  * outputVector() helper function, outputs packages in vect cleanly
-  * @param vect vector of packages to be output
-  * @param largestPerCol vector of largest package length in each column, nullptr for single column output
-  * @pre largestPerCol must be nullptr or not be empty
-  * @post output sent to stdout
-  */
-void vectorToStdout(const vector<string>& vect, const vector<size_t>* largestPerCol, const size_t maxRows){
-	using std::cout, std::endl;
-
-	if (!largestPerCol){
-		for (const string& pac : vect)
-			cout << "  " << pac << endl;
-		return;
-	}
-
-	if (maxRows < 2){
-		for (const string& pac : vect)
-			cout << "  " << pac;
-		cout << endl;
-		return;
-	}
-
-	const size_t maxCols = largestPerCol->size();
-
-	for (size_t row = 0; row < maxRows; row++){
-		for (size_t col = 0, pac = row; col < maxCols && pac < vect.size(); col++, pac += maxRows){
-			cout << "  " << vect.at(pac);
-
-			for (size_t k = vect.at(pac).size(); k < largestPerCol->at(col); k++) cout << ' ';
-			cout << std::flush;
-		}
-		cout << endl;
-	}
-}
-
-/**
-  * outputVector() helper function, checks if packages of vect can fit into desired number of columns without exceeding terminal width
-  * @param vect vector of packages to check layout validity
-  * @param largestPerCol vector of largest package size in each column
-  * @param cols width of terminal window
-  * @pre largestPerCol has size of desired number of columns
-  * @return true if vect packages fit specified layout
-  **/
-bool isValidLayout(const vector<string>& vect, const vector<size_t>& largestPerCol, const size_t maxRows, const size_t cols){
-	const size_t maxCols = largestPerCol.size();
-//	const size_t maxRows = (vect.size() % maxCols ? 1 : 0) + (vect.size() / maxCols);
-
-	for (size_t row = 0; row < maxRows; row++){
-		size_t lineLength = 0;
-			for (size_t col = 0, pac = row; col < maxCols && pac < vect.size(); col++, pac += maxRows){
-
-			lineLength += 2 + largestPerCol.at(col);
-
-			if (lineLength > cols) return false;
-		}
-	}
-
-	return true;
-}
-
-void outputVector(const vector<string>& vect, const size_t cols){
+bool outputVector(const vector<string>& vect, const size_t cols){
+	assert(!vect.empty());
 	size_t maxCols = 0;
-	size_t maxRows;
-	size_t i = 0;
 
-	for (const string& j : vect){
-		i += 2 + j.length();
-		if (i >= cols) break;
+	for (size_t lineLength = 0, pac = 0; lineLength < cols && pac < vect.size(); maxCols++, pac++)
+		lineLength += 2 + vect.at(pac).length();
 
-		maxCols++;
-	}
+	for (; maxCols > 1; maxCols--){
+		size_t maxRows = ((vect.size() % maxCols) ? 1 : 0) + (vect.size() / maxCols);
+		vector<size_t> largestPerCol(maxCols);
 
-	for (i = maxCols; i > 1; i--){
-		vector<size_t> largestPerCol(i);
-		maxRows = ((vect.size() % i) ? 1 : 0) + (vect.size() / i);
-
-		for (size_t column = 0; column < i; column++)
+		for (size_t column = 0; column < maxCols; column++)
 			largestPerCol.at(column) = getLargestInColumn(vect, column, maxRows);
 
 		if (isValidLayout(vect, largestPerCol, maxRows, cols))
-			return vectorToStdout(vect, &largestPerCol, maxRows);
+			return vectorToStdout(vect, largestPerCol, maxRows);
 	}
 
-	vectorToStdout(vect, nullptr, SIZE_MAX);
+	return vectorToStdout(vect, vector<size_t>(0), SIZE_MAX);
 }

@@ -1,4 +1,5 @@
 #include <csignal>  //for sig_int capture
+#include <cstdint>  //uint8_t
 #include <iostream>
 #include <sys/ioctl.h>  //for cols
 
@@ -23,25 +24,24 @@ int main(int argc, char* argv[]){
 	}
 
 	size_t cols;
-	bool flags[3] = {false, false, false};	//quiet, yes, sim
-	string args;
-	vector<vector<string>> packages; // = {UPGRADE, INSTALL, REMOVE, NOW_REMOVE, WITHHELD}
-	packages.resize(5);
-
-	if (!getOpts(argc, argv, args, flags)) exit(1);
-
-	cout << "Getting list of updated packages..." << std::flush;
-	if (system("sudo apt-get update >/dev/null 2>&1")) sig_handler(SIGINT);
-	currentStep++;
-	if (!flags[quiet]) cout << " Done";
-	cout << endl;
-
 	{
 		struct winsize size{};
 		ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
 
 		cols = size.ws_col;
 	}
+	bool flags[3] = {false, false, false};	//quiet, yes, sim
+	string args;
+	vector<vector<string>> packages; // = {UPGRADE, INSTALL, REMOVE, NOW_REMOVE, WITHHELD}
+	packages.resize(5);
+
+	if (!getOpts(argc, argv, args, flags, cols)) exit(1);
+
+	cout << "Getting list of updated packages..." << std::flush;
+	if (system("sudo apt-get update >/dev/null 2>&1")) sig_handler(SIGINT);
+	currentStep++;
+	if (!flags[quiet]) cout << " Done";
+	cout << endl;
 
 	cout << "Sorting package information..." << std::flush;
 	getPackages(packages);
