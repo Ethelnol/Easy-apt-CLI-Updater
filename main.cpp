@@ -1,53 +1,83 @@
 #include <csignal>  //for sig_int capture
-#include <cstdint>  //uint8_t
 #include <iostream>
 #include <sys/ioctl.h>  //for cols
 
 #include "functions.h"
+#include "out.h"
+
+bool flags[3] = {false, false, false}; //quiet, yes, sim
 
 uint8_t currentStep = 0;
 
-void sig_handler(int signal);
+void sig_handler(int signal){
+	using std::cerr;
+
+	cerr << "\nStopping update: ";
+
+	switch (currentStep){
+		case 0:{
+			cerr << "Package list retrieval";
+			break;
+		}
+		case 1:{
+			cerr << "Package sorting";
+			break;
+		}
+		case 2:{
+			cerr << "Updating/Removal";
+			break;
+		}
+		default:{
+			cerr << "Unknown process";
+			break;
+		}
+	}
+
+	cerr << " interrupted" << std::endl;
+
+	exit(signal);
+}
 
 //used to update/install packages
-bool update(const vector<vector<string>>& packages, const string& args, const bool flags[], size_t cols);
+bool update(const array<vector<string>, 5>& packages, const string& args, uint32_t cols);
 
 //remove packages that aren't needed but non disruptive
-bool remove(const vector<vector<string>>& packages, const string& args, const bool flags[], size_t cols);
+bool remove(const array<vector<string>, 5>& packages, const string& args, uint32_t cols);
 
 int main(int argc, char* argv[]){
-	using std::cout, std::endl;
+	using std::cout;
 
 	if (signal(SIGINT, sig_handler) == SIG_ERR){
-		std::cerr << "Error catching SIGINT" << endl;
+		std::cerr << "Error catching SIGINT" << std::endl;
 		exit(1);
 	}
 
-	size_t cols;
+	uint16_t cols;
 	{
 		struct winsize size{};
 		ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
 
 		cols = size.ws_col;
 	}
-	bool flags[3] = {false, false, false};	//quiet, yes, sim
 	string args;
-	vector<vector<string>> packages; // = {UPGRADE, INSTALL, REMOVE, NOW_REMOVE, WITHHELD}
-	packages.resize(5);
+	array<vector<string>, 5> packages; // = {UPGRADE, INSTALL, REMOVE, NOW_REMOVE, WITHHELD}
 
-	if (!getOpts(argc, argv, args, flags, cols)) exit(1);
+	if (!getOpts(argc, argv, args)){
+		outputHelp(cols);
+		exit(1);
+	}
 
 	cout << "Getting list of updated packages..." << std::flush;
-	if (system("sudo apt-get update >/dev/null 2>&1")) sig_handler(SIGINT);
+	if (system("sudo apt-get update >/dev/null 2>&1")){sig_handler(SIGINT);}
 	currentStep++;
 	if (!flags[quiet]) cout << " Done";
-	cout << endl;
+	cout << '\n';
 
 	cout << "Sorting package information..." << std::flush;
 	getPackages(packages);
 	currentStep++;
 	if (!flags[quiet]) cout << " Done";
-	cout << endl;
+	cout << '\n';
 
 	bool changes = false;
 	bool acted = false;
@@ -55,147 +85,121 @@ int main(int argc, char* argv[]){
 	    !packages.at(INSTALL).empty() ||
 	    !packages.at(NOW_REMOVE).empty()){
 		changes = true;
-		if (update(packages, args, flags, cols)) acted = true;
+		if (update(packages, args, cols)){acted = true;}
 	}
 	if (!packages.at(REMOVE).empty()){
 		changes = true;
-		if (remove(packages, args, flags, cols)) acted = true;
+		if (remove(packages, args, cols)){acted = true;}
 	}
 
-	cout << endl;
-	cout << "Update Complete";
-	if (!changes) cout << ": Nothing to do";
-	else if (!acted) cout << ": No action taken";
-	cout << endl;
+	cout << "\nUpdate Complete";
+	if (!changes){cout << ": Nothing to do";}
+	else if (!acted){cout << ": No action taken";}
+	cout << std::endl;
 
 	return 0;
 }
 
-bool update(const vector<vector<string>>& packages, const string& args, const bool flags[], const size_t cols){
-	using std::cout, std::endl;
+bool update(const array<vector<string>, 5>& packages, const string& args, const uint32_t cols){
+	using std::cout;
 
 	bool needComma = false;
 
-	cout << endl;
+	cout << '\n';
 	if (!packages.at(UPGRADE).empty()){
-		size_t size = packages.at(UPGRADE).size();
+		uint32_t size = packages.at(UPGRADE).size();
 
-		cout << size << " package"
-		     << ((size > 1) ? "s are" : " is")
-		     << " upgradable";
+		string x = std::to_string(size) + ((size > 1) ? " packages are upgradable" : " package is upgradable");
+		cout << x;
 
 		needComma = true;
 	}
 	if (!packages.at(INSTALL).empty()){
-		size_t size = packages.at(INSTALL).size();
+		uint32_t size = packages.at(INSTALL).size();
 
-		if (needComma) cout << ", ";
+		if (needComma){cout << ", ";}
 
-		cout << size << " package"
-		     << ((size > 1) ? "s" : "")
-		     << " would be newly installed";
+		string x = std::to_string(size) + ((size > 1) ? " packages would be newly installed" : " package would be newly installed");
+		cout << x;
 
 		needComma = true;
 	}
 	if (!packages.at(NOW_REMOVE).empty()){
-		size_t size = packages.at(NOW_REMOVE).size();
+		uint32_t size = packages.at(NOW_REMOVE).size();
 
-		if (needComma) cout << ", ";
-		cout << size << " package"
-		     << ((size > 1) ? "s are" : " is")
-		     << " would be removed NOW";
-	}
-	cout << endl;
+		if (needComma){cout << ", ";}
 
-	if (!packages.at(UPGRADE).empty()){
-		cout << "Upgrading:" << endl;
-		outputVector(packages.at(UPGRADE), cols);
+		string x = std::to_string(size) + ((size > 1 ) ? " packages would be removed NOW" : " package would be removed NOW");
+
+		cout << x;
 	}
-	if (!packages.at(INSTALL).empty()){
-		cout << "Installing:" << endl;
-		outputVector(packages.at(INSTALL), cols);
-	}
-	if (!packages.at(NOW_REMOVE).empty()){
-		cout << "Removing NOW:" << endl;
-		outputVector(packages.at(NOW_REMOVE), cols);
-	}
-	if (!packages.at(WITHHELD).empty()){
-		cout << "Withholding:" << endl;
-		outputVector(packages.at(WITHHELD), cols);
+	cout << "\n";
+
+	vector<string> text = {"Upgrading:", "Installing:", "", "Removing NOW:", "Withholding:"};
+	
+	for (uint8_t i = 0; i < 5; i++){
+		if (i == 2 || packages.at(i).empty()){continue;}
+		
+		cout << '\n' << text.at(i) << '\n';
+		outputVector(packages.at(i), cols);
 	}
 
-	if (flags[sim]) return false;
+	if (flags[sim]){return false;}
 
 	char input;
-	if (flags[yes]) input = 'y';
+	if (flags[yes]){input = 'y';}
 	else{
-		cout << endl;
-		cout << "Would you like to update? (y/N) " << std::flush;
+		cout << "\nWould you like to update? (y/N) " << std::flush;
 		std::cin >> input;
 	}
 
 	if (tolower(input) == 'y'){
+		cout << std::flush;
 		string command = "sudo apt dist-upgrade --yes" + args;
 		system(command.c_str());
 		return true;
 	}
-	cout << "Abort." << endl;
+	
+	cout << "Abort.\n";
 	return false;
 }
 
-bool remove(const vector<vector<string>>& packages, const string& args, const bool flags[], const size_t cols){
-	using std::cout, std::endl;
+bool remove(const array<vector<string>, 5>& packages, const string& args, const uint32_t cols){
+	using std::cout, std::flush;
 	char input;
 
-	cout << endl;
 	{
-		size_t size = packages.at(REMOVE).size();
+		uint32_t size = packages.at(REMOVE).size();
 
-		cout << size << " package"
-		     << ((size > 1) ? "s are" : " is")
-			 << " removable" << endl;
+		string x;
+		if (size > 1){
+			x = std::to_string(size) + " packages are removable";
+		}
+		else{
+			x = std::to_string(size) + " package is removable";
+		}
+
+		cout << '\n' << x << '\n';
 	}
 
-	cout << "Removing:" << endl;
+	cout << "Removing:\n";
 	outputVector(packages.at(REMOVE), cols);
 
-	if (flags[sim]) return false;
+	if (flags[sim]){return false;}
 
-	if (flags[yes]) input = 'y';
+	if (flags[yes]){input = 'y';}
 	else{
-		cout << endl;
-		cout << "Would you like to remove these packages? (y/N) " << std::flush;
+		cout << "\nWould you like to remove these packages? (y/N) " << std::flush;
 		std::cin >> input;
 	}
 
 	if (tolower(input) == 'y'){
+		cout << std::flush;
 		string command = "sudo apt autoremove --yes" + args;
 		system(command.c_str());
 		return true;
 	}
-	cout << "Abort." << endl;
+	
+	cout << "Abort.\n";
 	return false;
-}
-
-void sig_handler(int signal){
-	using std::cerr, std::endl;
-
-	cerr << endl << "Stopping update: ";
-
-	if (signal == SIGINT){
-		switch (currentStep){
-			case 0: cerr << "Package list retrieval";
-				break;
-			case 1: cerr << "Package sorting";
-				break;
-			case 2: cerr << "Updating/Removal";
-				break;
-			default: cerr << "Unknown process";
-				break;
-		}
-
-		cerr << " interrupted" << endl;
-	}
-
-	exit(signal);
 }

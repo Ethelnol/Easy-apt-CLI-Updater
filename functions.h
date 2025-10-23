@@ -5,17 +5,19 @@
 #ifndef EASY_CLI_UPDATER_CPP_FUNCTIONS_H
 #define EASY_CLI_UPDATER_CPP_FUNCTIONS_H
 
+#include <array>
 #include <string>
 #include <vector>
 
+using std::array;
 using std::string;
 using std::vector;
 
-enum{
+enum pkgType{
 	UPGRADE, INSTALL, REMOVE, NOW_REMOVE, WITHHELD
 };
 
-enum{
+enum FLAG{
 	quiet, yes, sim
 };
 
@@ -24,7 +26,7 @@ enum{
   * @param packages vector to be populated
   * @post packages are populated
   **/
-void getPackages(vector<vector<string>>& packages);
+void getPackages(array<vector<string>, 5>& packages);
 
 /**
   * Checks for arguments passed when program is executed and assigns to vector
@@ -38,17 +40,6 @@ void getPackages(vector<vector<string>>& packages);
   * @post args is (over)written and relevant flags are set to true
   * @return false if -h or --help is passed as an argument
   **/
-bool getOpts(int argc, char* argv[], string& args, bool flags[], size_t cols);
-
-/**
-  * Outputs contents of vector cleanly
-  * @param vect vector to be output
-  * @param cols width of terminal window
-  * @pre vect is not empty
-  * @post output is sent to stdout
-  * @return true if packages could be output cleanly and won't wrap around
-  * @return false if packages cannot be output without wrapping around
-  **/
-bool outputVector(const vector<string>& vect, size_t cols);
+bool getOpts(int argc, char* argv[], string& args);
 
 #endif //EASY_CLI_UPDATER_CPP_FUNCTIONS_H

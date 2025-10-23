@@ -2,12 +2,13 @@
   * Created by Caitlyn Briggs on 04/10/2025
   **/
 
-#include <cassert>
-#include <cstdint>  //SIZE_MAX
 #include <iostream>
 #include <sstream>
 
 #include "functions.h"
+#include "out.h"
+
+extern bool flags[];
 
 /**
   * Gets output of stdout and stderr and returns output as string
@@ -16,119 +17,84 @@
   * @author Jeremy Morgan
   * @source www.jeremymorgan.com/tutorials/c-programming/how-to-capture-the-output-of-a-linux-command-in-c
   **/
-string GetStdoutFromCommand(string cmd){
+string GetStdoutFromCommand(const string& cmd){
 	string data;
 	FILE* stream;
 	const int max_buffer = 256;
 	char buffer[max_buffer];
-	cmd.append(" 2>&1");
 
-	stream = popen(cmd.c_str(), "r");
+	stream = popen((cmd + " 2>&1").c_str(), "r");
 
 	if (stream){
-		while (!feof(stream))
-			if (fgets(buffer, max_buffer, stream)) data.append(buffer);
+		while (!feof(stream)){
+			if (fgets(buffer, max_buffer, stream)){data.append(buffer);}
+		}
 		pclose(stream);
 	}
+
 	return data;
 }
 
-void getPackages(vector<vector<string>>& packages){
-	std::stringstream ss(GetStdoutFromCommand("sudo apt-get dist-upgrade --assume-no"));
-	string line;
-	string package;
-	string overflow;
+void getPackages(array<vector<string>, 5>& packages){
+	std::stringstream ss(GetStdoutFromCommand("sudo apt-get full-upgrade --assume-no"));
+	string line;        //entire line
+	string overflow;    //overflow string
 
-	int8_t type;
+	pkgType type;
 
 	while (!ss.eof() && getline(ss, line)){
-		line.insert(0, overflow);
-		overflow = "";
-		if (line.empty() || line.at(0) != 'T') continue;
+		line.assign(overflow + line);
+		if (line.empty() || line.front() != 'T'){continue;}
 
-		/*
+		/* apt-get lines that denote package types where
+		 * the nth character is different across all 6 messages
 		 * {33,g,e,a,i,M,k}
 		 * {36,d,n,c,l,E,t}
 		 * {38,d,t,l,y,:,b}
 		 */
 		switch(line.at(33)){
-			case 'g':
+			case 'g':{
 				type = UPGRADE;
 				break;
-			case 'e':
+			}
+			case 'e':{
 				type = INSTALL;
 				break;
-			case 'a':
-			case 'i':
+			}
+			case 'a': case 'i':{
 				type = REMOVE;
 				break;
-			case 'M':
+			}
+			case 'M':{
 				type = NOW_REMOVE;
 				break;
-			case 'k':
+			}
+			case 'k':{
 				type = WITHHELD;
 				break;
-			default:
-				std::cerr << "getPackages(), unknown line passed - " << line << std::endl;
+			}
+			default:{
+				string errorBar(71, ' '); //\n and highlights offending char
+				//         1 + (36 + 33) + 1
+				errorBar[0] = '\n';
+				errorBar[70] = '_';
+				std::cerr << "\ngetPackages(), unknown line passed - " << line
+				          << errorBar << std::endl;
 				exit(line.at(33));
+			}
 		}
 
-		while (ss >> package && !package.empty() && std::islower(package.at(0)))
+		string package;
+		while (ss >> package && !package.empty() && std::islower(package.front())){
 			packages.at(type).push_back(package);
+		}
+
 		overflow = package;
 		packages.at(type).shrink_to_fit();
 	}
 }
 
-/**
-  * getOpts helper function, outputs help information if "-h" or "--help" are passed as arguments
-  **/
-void outputHelp(const size_t cols){
-	using std::cout, std::endl;
-
-	const vector<vector<string>> page = {
-			{"EasyUpdater"},
-			{"Usage: EasyUpdater [options]"},
-			{
-				"EasyUpdater is a overhead program for apt and apt-get that makes the process of updating and removing packages faster with a single command.",
-				"EasyUpdater cleanly displays data such as on the packages to be changes and displays the packages similar to apt v2.9.0's UI update.",
-				"Any options passed to EasyUpdater will be passed when running updates, so be sure all arguments are vaild arguments for apt and apt-get.  See apt(8) for more information."
-			}
-	};
-
-	for (size_t paragraph = 0; paragraph < page.size(); paragraph++){
-		for (const string& line : page.at(paragraph)){
-			std::stringstream ss(line);
-			string word;
-			size_t lineLength = 0;
-			bool vomit = false, first = true;
-
-			while (!ss.eof() && ss >> word){
-				if (lineLength + word.size() + 1 > cols){
-					if (first && lineLength == 0){
-						vomit = true;
-						break;
-					}
-
-					cout << endl;
-					lineLength = 0;
-					first = false;
-				}
-
-				cout << word << " " << std::flush;
-				lineLength += word.size() + 1l;
-			}
-
-			if (vomit) cout << line;
-
-			cout << endl;
-		}
-
-		if ((paragraph + 1) < page.size()) cout << endl;
-	}
-}
-
-bool getOpts(const int argc, char* argv[], string& args, bool flags[], const size_t cols){
+bool getOpts(const int argc, char* argv[], string& args){
 	string tmpStr;
 	vector<string> argsVect;
 
@@ -152,10 +118,7 @@ bool getOpts(const int argc, char* argv[], string& args, bool flags[], const siz
 	}
 
 	for (const string& i : argsVect){
-		if (i == "-h" || i == "--help"){
-			outputHelp(cols);
-			return false;
-		}
+		if (i == "-h" || i == "--help"){return false;}
 		else if (i == "-q" || i == "--quiet") flags[quiet] = true;
 		else if (i == "-y" || i == "--yes" || i == "--assume-yes") flags[yes] = true;
 		else if (i == "-s" || i == "--simulate" || i == "--just-print" ||
@@ -166,102 +129,4 @@ bool getOpts(const int argc, char* argv[], string& args, bool flags[], const siz
 	}
 
 	return true;
-}
-
-/**
-  * outputVector helper function, outputs packages in vect cleanly
-  * @param vect vector of packages to be output
-  * @param largestPerCol vector of largest package length in each column
-  * @post output sent to stdout
-  * @return true if output
-  */
-bool vectorToStdout(const vector<string>& vect, const vector<size_t>& largestPerCol, const size_t maxRows){
-	using std::cout, std::endl;
-
-	const size_t maxCols = largestPerCol.size();
-
-	if (maxCols < 2){
-		for (const string& pac : vect)
-			cout << "  " << pac << endl;
-		return (maxCols == 1);
-	}
-
-	if (maxRows < 2){
-		for (const string& pac : vect)
-			cout << "  " << pac;
-		cout << endl;
-		return true;
-	}
-
-	for (size_t row = 0; row < maxRows; row++){
-		for (size_t col = 0, pac = row; col < maxCols && pac < vect.size(); col++, pac += maxRows){
-			cout << "  " << vect.at(pac);
-
-			for (size_t k = vect.at(pac).size(); k < largestPerCol.at(col); k++)
-				cout << ' ';
-		}
-		cout << endl;
-	}
-
-	return true;
-}
-
-/**
-  * outputVector helper function, checks if packages of vect can fit into desired number of columns without exceeding terminal width
-  * @param vect vector of packages to check layout validity
-  * @param largestPerCol vector of largest package size in each column
-  * @param cols width of terminal window
-  * @return true if vect packages fit specified layout
-  **/
-bool isValidLayout(const vector<string>& vect, const vector<size_t>& largestPerCol, const size_t maxRows, const size_t cols){
-	const size_t maxCols = largestPerCol.size();
-
-	for (size_t row = 0; row < maxRows; row++){
-		size_t lineLength = 0;	//current num of chars on line
-		size_t pac = row;		//current package index, used to not exceed vect.size()
-
-		for (size_t col = 0; col < maxCols && pac < vect.size(); col++, pac += maxRows){
-			lineLength += 2 + largestPerCol.at(col);
-
-			if (lineLength > cols) return false;
-		}
-	}
-
-	return true;
-}
-
-/**
-  * outputVector helper function, returns length of largest package in column
-  * @param column column to check
-  * @param maxRows maximum number of packages in each column
-  * @return length of largest package in column
-  **/
-size_t getLargestInColumn(const vector<string>& vect, const size_t col, const size_t maxRows){
-	size_t returnNum = 0;
-
-	for (size_t n = (col * maxRows); n < ((col + 1) * maxRows) && n < vect.size(); n++)
-		if (vect.at(n).length() > returnNum) returnNum = vect.at(n).length();
-
-	return returnNum;
-}
-
-bool outputVector(const vector<string>& vect, const size_t cols){
-	assert(!vect.empty());
-	size_t maxCols = 0;
-
-	for (size_t lineLength = 0, pac = 0; lineLength < cols && pac < vect.size(); maxCols++, pac++)
-		lineLength += 2 + vect.at(pac).length();
-
-	for (; maxCols > 1; maxCols--){
-		size_t maxRows = ((vect.size() % maxCols) ? 1 : 0) + (vect.size() / maxCols);
-		vector<size_t> largestPerCol(maxCols);
-
-		for (size_t column = 0; column < maxCols; column++)
-			largestPerCol.at(column) = getLargestInColumn(vect, column, maxRows);
-
-		if (isValidLayout(vect, largestPerCol, maxRows, cols))
-			return vectorToStdout(vect, largestPerCol, maxRows);
-	}
-
-	return vectorToStdout(vect, vector<size_t>(0), SIZE_MAX);
 }

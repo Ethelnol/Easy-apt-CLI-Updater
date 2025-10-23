@@ -1,16 +1,19 @@
 ALL: EasyUpdater
-CPP=g++
-OPTIMISED=O0
-VERSION=c++17
+CPP = g++
+OPT ?= O0
+VERSION = c++17
 
-functions.o : functions.cpp
-	$(CPP) -$(OPTIMISED) -std=$(VERSION) -c functions.cpp
+functions.o : functions.cpp functions.h out.h
+	$(CPP) -$(OPT) -std=$(VERSION) -c functions.cpp
 
-main.o : main.cpp
-	$(CPP) -$(OPTIMISED) -std=$(VERSION) -c main.cpp
+main.o : main.cpp functions.h out.h
+	$(CPP) -$(OPT) -std=$(VERSION) -c main.cpp
 
-EasyUpdater : main.o functions.o
-	$(CPP) -o EasyUpdater main.o functions.o
+out.o : out.cpp out.h
+	$(CPP) -$(OPT) -std=$(VERSION) -c out.cpp
+
+EasyUpdater : main.o functions.o out.o
+	$(CPP) -o EasyUpdater main.o functions.o out.o
 
 clean:
 	rm -f *.o
