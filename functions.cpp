@@ -36,14 +36,14 @@ string GetStdoutFromCommand(const string& cmd){
 }
 
 void getPackages(array<vector<string>, 5>& packages){
-	std::stringstream ss(GetStdoutFromCommand("sudo apt-get full-upgrade --assume-no"));
+	std::stringstream ss(GetStdoutFromCommand("sudo apt-get dist-upgrade --assume-no"));
 	string line;        //entire line
 	string overflow;    //overflow string
 
 	pkgType type;
 
 	while (!ss.eof() && getline(ss, line)){
-		line.assign(overflow + line);
+		//line.assign(overflow + line);
 		if (line.empty() || line.front() != 'T'){continue;}
 
 		/* apt-get lines that denote package types where
@@ -74,58 +74,64 @@ void getPackages(array<vector<string>, 5>& packages){
 				break;
 			}
 			default:{
-				string errorBar(71, ' '); //\n and highlights offending char
-				//         1 + (36 + 33) + 1
-				errorBar[0] = '\n';
-				errorBar[70] = '_';
 				std::cerr << "\ngetPackages(), unknown line passed - " << line
-				          << errorBar << std::endl;
+				          << "\n                                                                    _\n";
 				exit(line.at(33));
 			}
 		}
 
 		string package;
-		while (ss >> package && !package.empty() && std::islower(package.front())){
-			packages.at(type).push_back(package);
+		while (getline(ss, package, '\n') && package[1] == ' '){
+			std::stringstream ss2(package);
+			while (!ss2.eof() && ss2 >> package){
+				packages.at(type).push_back(package);
+			}
 		}
 
-		overflow = package;
+		//overflow = package;
 		packages.at(type).shrink_to_fit();
 	}
 }
 
 bool getOpts(const int argc, char* argv[], string& args){
-	string tmpStr;
 	vector<string> argsVect;
 
-	for (int i = 1; i < argc; i++){
-		tmpStr = argv[i];
+	for (auto i = 1; i < argc; i++){
+		string tmpStr(argv[i]);
 
-		if (tmpStr.size() < 2 || tmpStr.at(2) == '-'){
-			std::cerr << "getOpts(): invalid parameter - " << tmpStr << std::endl;
+		if (tmpStr.size() < 2 || (tmpStr.size() > 3 && tmpStr.at(2) == '-')){
+			std::cerr << "Error: invalid parameter - " << tmpStr << std::endl;
 			exit(1);
 		}
 
 		if (tmpStr.size() == 2 ||
-		    (tmpStr.substr(0, 2) == "--" &&
-		     std::isalnum(tmpStr.at(2)))
-		   ) argsVect.push_back(tmpStr);
+		   (tmpStr[0] == '-' && tmpStr[1] == '-' && std::isalnum(tmpStr.at(2)))
+		){
+			argsVect.push_back(tmpStr);
+		}
 		else{
-			string dash = "-";
-			for (int j = 1; j < tmpStr.size(); j++)
-				argsVect.push_back(dash + tmpStr.at(j));
+			for (auto j = 1; j < tmpStr.size(); j++){
+				argsVect.emplace_back('-', tmpStr.at(j));
+			}
 		}
 	}
 
 	for (const string& i : argsVect){
-		if (i == "-h" || i == "--help"){return false;}
-		else if (i == "-q" || i == "--quiet") flags[quiet] = true;
-		else if (i == "-y" || i == "--yes" || i == "--assume-yes") flags[yes] = true;
+		if (i == "-h" || i == "--help"){
+			return false;
+		}
+		else if (i == "-q" || i == "--quiet"){
+			flags[quiet] = true;
+		}
+		else if (i == "-y" || i == "--yes" || i == "--assume-yes"){
+			flags[yes] = true;
+		}
 		else if (i == "-s" || i == "--simulate" || i == "--just-print" ||
-		         i == "--dry-run" || i == "--recon" || i == "--no-act" || i == "--assume-no")
+		         i == "--dry-run" || i == "--recon" || i == "--no-act" || i == "--assume-no"){
 			flags[sim] = true;
+		}
 
-		args += " " + i;
+		args.append(' ' + i);
 	}
 
 	return true;

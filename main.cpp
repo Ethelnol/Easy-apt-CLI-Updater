@@ -68,7 +68,7 @@ int main(int argc, char* argv[]){
 	}
 
 	cout << "Getting list of updated packages..." << std::flush;
-	if (system("sudo apt-get update >/dev/null 2>&1")){sig_handler(SIGINT);}
+	if (system("sudo apt-get update >/dev/null 2>&1") == 130){sig_handler(SIGINT);}
 	currentStep++;
 	if (!flags[quiet]) cout << " Done";
 	cout << '\n';
@@ -133,7 +133,6 @@ bool update(const array<vector<string>, 5>& packages, const string& args, const 
 
 		cout << x;
 	}
-	cout << "\n";
 
 	vector<string> text = {"Upgrading:", "Installing:", "", "Removing NOW:", "Withholding:"};
 	
@@ -155,8 +154,7 @@ bool update(const array<vector<string>, 5>& packages, const string& args, const 
 
 	if (tolower(input) == 'y'){
 		cout << std::flush;
-		string command = "sudo apt dist-upgrade --yes" + args;
-		system(command.c_str());
+		system(string("sudo apt dist-upgrade --yes" + args).c_str());
 		return true;
 	}
 	
@@ -195,8 +193,7 @@ bool remove(const array<vector<string>, 5>& packages, const string& args, const 
 
 	if (tolower(input) == 'y'){
 		cout << std::flush;
-		string command = "sudo apt autoremove --yes" + args;
-		system(command.c_str());
+		system(string("sudo apt autoremove --yes" + args).c_str());
 		return true;
 	}
 	
