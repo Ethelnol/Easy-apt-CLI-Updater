@@ -42,9 +42,11 @@ void getPackages(array<vector<string>, 5>& packages){
 
 	pkgType type;
 
-	while (!ss.eof() && getline(ss, line)){
-		//line.assign(overflow + line);
-		if (line.empty() || line.front() != 'T'){continue;}
+	while (!ss.eof()){
+		if (line.empty() || line.front() != 'T'){
+			getline(ss, line);
+			continue;
+		}
 
 		/* apt-get lines that denote package types where
 		 * the nth character is different across all 6 messages
@@ -88,7 +90,7 @@ void getPackages(array<vector<string>, 5>& packages){
 			}
 		}
 
-		//overflow = package;
+		line = package;
 		packages.at(type).shrink_to_fit();
 	}
 }
