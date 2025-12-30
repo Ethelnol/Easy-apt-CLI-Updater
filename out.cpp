@@ -9,6 +9,7 @@
 
 /**
   * Outputs line to std::cout without wrapping
+  * @param line text to be output
   * @param bounds max number of characters to output
   * @param largestWord size of largest word in line
   * @post std::cout buffer will not be flushed
@@ -21,30 +22,29 @@ void textInBounds(const string& line, const uint32_t bounds, const string::size_
 
 	std::stringstream ss(line);
 
+	string str; //next str in line
 	string buffer; //string to hold text to reduce std::cout calls
-	string::size_type buffer_len = 0; //length of buffer
+	str.reserve(largestWord);
 	buffer.reserve(bounds + 1);
 
-	string str; //next str in line
-	if (largestWord){str.reserve(largestWord);}
+	ss >> str;
+	buffer.assign(str);
+
+	string::size_type bufferLen = 0; //length of buffer
 
 	while (!ss.eof() && ss >> str){
-		buffer_len = buffer_len + str.length();
+		bufferLen = bufferLen + str.length();
 
 		//text exceeds terminal width
-		if (buffer_len > bounds){
+		if (++bufferLen > bounds){
+			//output and reset
 			buffer.push_back('\n');
 			std::cout << buffer;
 
-			buffer_len = str.size();
+			bufferLen = str.length();
 			buffer.clear();
 		}
-
-		//append str with space
-		if (buffer_len != bounds){
-			str.push_back(' ');
-			++buffer_len;
-		}
+		else{buffer.push_back(' ');}
 
 		buffer.append(str);
 	}
@@ -63,20 +63,15 @@ void outputHelp(const uint32_t cols){
 					"Any options passed to EasyUpdater will be passed when running updates, so be sure all arguments are vaild arguments for apt and apt-get. See apt(8) for more information."}
 	};
 
-	auto paragraph = page.begin();
-	auto line = paragraph->begin();
-
-	while (paragraph != page.end()){
-		textInBounds(*line, cols, 12);
-
-		//increment line or increment paragraph
-		if (++line == paragraph->end() && ++paragraph != page.end()){line = paragraph->begin();}
+	for (const vector<string>& paragraph : page){
+		for (const string& line : paragraph){
+			textInBounds(line, cols, 12); //12 is \"information.\"
+		}
 	}
-	std::cout << std::flush;
 }
 
 bool outputVector(const vector<string>& vect, const uint16_t cols){
-	uint32_t maxCols = 1; //while loop decrements by 1
+	auto maxCols = 1; //while loop decrements by 1
 
 	for (uint32_t lineLength = 0, pac = 0; lineLength < cols && pac < vect.size(); ++pac){
 		++maxCols;
@@ -84,7 +79,7 @@ bool outputVector(const vector<string>& vect, const uint16_t cols){
 	}
 
 	while (--maxCols){
-		uint32_t maxRows = vect.size() / maxCols;
+		auto maxRows = vect.size() / maxCols;
 
 		if (vect.size() % maxCols){++maxRows;}
 
@@ -119,7 +114,7 @@ vector<string::size_type> getLargestInColumn(const vector<string>& vect, const u
 bool isValidLayout(const vector<string::size_type>& largestPerCol, const uint16_t cols){
 	uint16_t len = 0;
 
-	for (auto i : largestPerCol){
+	for (string::size_type i : largestPerCol){
 		len = 2 + len + i;
 		if (len > cols){return false;}
 	}

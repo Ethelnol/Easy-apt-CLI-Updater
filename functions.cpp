@@ -1,6 +1,6 @@
-/**
-  * Created by Caitlyn Briggs on 04/10/2025
-  **/
+/*
+ * Created by Caitlyn Briggs on 04/10/2025
+ */
 
 #include <iostream>
 #include <sstream>
@@ -10,24 +10,24 @@
 
 extern bool flags[];
 
-/**
-  * Gets output of stdout and stderr and returns output as string
-  * @param cmd command to be passed to system
-  * @return string of stdout and stderr from cmd
-  * @author Jeremy Morgan
-  * @source www.jeremymorgan.com/tutorials/c-programming/how-to-capture-the-output-of-a-linux-command-in-c
-  **/
-string GetStdoutFromCommand(const string& cmd){
-	string data;
-	FILE* stream;
-	const int max_buffer = 256;
-	char buffer[max_buffer];
-
-	stream = popen((cmd + " 2>&1").c_str(), "r");
+/*
+ * Gets output of stdout and stderr and returns output as string
+ * @param cmd command to be passed to system
+ * @return string of stdout and stderr from cmd
+ * @author Jeremy Morgan
+ * @source www.jeremymorgan.com/tutorials/c-programming/how-to-capture-the-output-of-a-linux-command-in-c
+ */
+string getStdoutFromCommand(const string& cmd){
+	string        data;
+	FILE*         stream     = popen((cmd + " 2>&1").c_str(), "r");
+	constexpr int MAX_BUFFER = 256;
+	char          buffer[MAX_BUFFER];
 
 	if (stream){
 		while (!feof(stream)){
-			if (fgets(buffer, max_buffer, stream)){data.append(buffer);}
+			if (fgets(buffer, MAX_BUFFER, stream)){
+				data.append(buffer);
+			}
 		}
 		pclose(stream);
 	}
@@ -35,10 +35,23 @@ string GetStdoutFromCommand(const string& cmd){
 	return data;
 }
 
+void sortPackage(std::stringstream& ss, array<vector<string>, 5>& packages, string& line, pkgType type){
+	string tmpStr; //holds package
+	while (getline(ss, tmpStr, '\n') && tmpStr[0] == ' '){
+		std::stringstream ss2(tmpStr);
+		while (!ss2.eof() && ss2 >> tmpStr){
+			packages.at(type).push_back(tmpStr);
+		}
+	}
+
+	line = tmpStr;
+	packages[type].shrink_to_fit();
+}
+
 void getPackages(array<vector<string>, 5>& packages){
-	std::stringstream ss(GetStdoutFromCommand("sudo apt-get dist-upgrade --assume-no"));
-	string line;        //entire line
-	string overflow;    //overflow string
+	std::stringstream ss(getStdoutFromCommand("sudo apt-get full-upgrade --assume-no"));
+	string            line;        //entire line
+	string            overflow;    //overflow string
 
 	pkgType type;
 
@@ -54,7 +67,7 @@ void getPackages(array<vector<string>, 5>& packages){
 		 * {36,d,n,c,l,E,t}
 		 * {38,d,t,l,y,:,b}
 		 */
-		switch(line.at(33)){
+		switch (line.at(33)){
 			case 'g':{
 				type = UPGRADE;
 				break;
@@ -63,7 +76,8 @@ void getPackages(array<vector<string>, 5>& packages){
 				type = INSTALL;
 				break;
 			}
-			case 'a': case 'i':{
+			case 'a':
+			case 'i':{
 				type = REMOVE;
 				break;
 			}
@@ -77,21 +91,21 @@ void getPackages(array<vector<string>, 5>& packages){
 			}
 			default:{
 				std::cerr << "\ngetPackages(), unknown line passed - " << line
-				          << "\n                                                                    _\n";
+				<< "\n                                                                    _\n";
 				exit(line.at(33));
 			}
 		}
 
-		string package;
-		while (getline(ss, package, '\n') && package[1] == ' '){
-			std::stringstream ss2(package);
-			while (!ss2.eof() && ss2 >> package){
-				packages.at(type).push_back(package);
-			}
-		}
+		sortPackage(ss, packages, line, type);
+	}
+}
 
-		line = package;
-		packages.at(type).shrink_to_fit();
+void checkForImageUpdate(array<vector<string>, 5>& packages){
+	for (string& i : packages[INSTALL]){
+		if (i.substr(0, 6) == "linux-"){
+			getPackages(packages);
+			return;
+		}
 	}
 }
 
@@ -107,7 +121,7 @@ bool getOpts(const int argc, char* argv[], string& args){
 		}
 
 		if (tmpStr.size() == 2 ||
-		   (tmpStr[0] == '-' && tmpStr[1] == '-' && std::isalnum(tmpStr.at(2)))
+		    (tmpStr[0] == '-' && tmpStr[1] == '-' && std::isalnum(tmpStr.at(2)))
 		){
 			argsVect.push_back(tmpStr);
 		}
@@ -122,15 +136,17 @@ bool getOpts(const int argc, char* argv[], string& args){
 		if (i == "-h" || i == "--help"){
 			return false;
 		}
-		else if (i == "-q" || i == "--quiet"){
-			flags[quiet] = true;
+
+		if (i == "-q" || i == "--quiet"){
+			flags[QUIET] = true;
 		}
 		else if (i == "-y" || i == "--yes" || i == "--assume-yes"){
-			flags[yes] = true;
+			flags[YES] = true;
 		}
-		else if (i == "-s" || i == "--simulate" || i == "--just-print" ||
-		         i == "--dry-run" || i == "--recon" || i == "--no-act" || i == "--assume-no"){
-			flags[sim] = true;
+		else if (i == "-s" || i == "--simulate" ||
+		         i == "--just-print" || i == "--dry-run" ||
+		         i == "--recon" || i == "--no-act" || i == "--assume-no"){
+			flags[SIM] = true;
 		}
 
 		args.append(' ' + i);
