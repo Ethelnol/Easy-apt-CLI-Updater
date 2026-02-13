@@ -37,7 +37,30 @@ string getStdoutFromCommand(const string& cmd){
 
 void sortPackage(std::stringstream& ss, array<vector<string>, 5>& packages, string& line, pkgType type){
 	string tmpStr; //holds package
-	while (getline(ss, tmpStr, '\n') && tmpStr[0] == ' '){
+	while (getline(ss, tmpStr, '\n')){
+		//no packages up uppercase characters
+		if (isupper(tmpStr[0])){
+			break;
+		}
+		//check if all characters in word are digits
+		//no packages are all digits and the word could be output information from apt-get
+		if (isdigit(tmpStr[0])){
+			bool allNum = true;
+			for (auto i = 1; i < tmpStr.length(); ++i){
+				if (tmpStr[i] == ' '){
+					break;
+				}
+				if (isalpha(tmpStr[i])){
+					allNum = false;
+					break;
+				}
+			}
+
+			if (allNum){
+				break;
+			}
+		}
+
 		std::stringstream ss2(tmpStr);
 		while (!ss2.eof() && ss2 >> tmpStr){
 			packages.at(type).push_back(tmpStr);
@@ -103,6 +126,9 @@ void getPackages(array<vector<string>, 5>& packages){
 void checkForImageUpdate(array<vector<string>, 5>& packages){
 	for (string& i : packages[INSTALL]){
 		if (i.substr(0, 6) == "linux-"){
+			for (auto& k : packages){
+				k.clear();
+			}
 			getPackages(packages);
 			return;
 		}

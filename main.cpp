@@ -41,7 +41,7 @@ void sigHandler(const int signal){
 //used to update/install packages
 bool update(const array<vector<string>, 5>& packages, const string& args, uint32_t cols);
 
-//remove packages that aren't needed but non disruptive
+//remove packages that aren't needed but non-disruptive
 bool remove(const array<vector<string>, 5>& packages, const string& args, uint32_t cols);
 
 int main(int argc, char* argv[]){
@@ -76,7 +76,6 @@ int main(int argc, char* argv[]){
 
 	cout << "Sorting package information..." << std::flush;
 	getPackages(packages);
-	checkForImageUpdate(packages);
 	currentStep++;
 	if (!flags[QUIET]){
 		cout << " Done";
@@ -93,6 +92,11 @@ int main(int argc, char* argv[]){
 	}
 	if (!packages.at(REMOVE).empty()){
 		changes = true;
+
+		if (acted){
+			checkForImageUpdate(packages);
+		}
+
 		if (remove(packages, args, cols)){
 			acted = true;
 		}
